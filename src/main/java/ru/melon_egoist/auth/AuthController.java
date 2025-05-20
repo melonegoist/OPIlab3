@@ -13,6 +13,8 @@ import ru.melon_egoist.auth.registration.RegistrationRequest;
 
 // for the new commit
 
+// for the second new commit
+
 @RestController
 public class AuthController {
 
