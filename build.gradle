@@ -1,0 +1,431 @@
+import org.xml.sax.helpers.DefaultHandler
+
+import javax.tools.ToolProvider
+import javax.xml.parsers.SAXParserFactory
+import java.security.MessageDigest
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.hidetake.ssh' version '2.11.2'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web:3.2.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.2.0'
+    implementation 'org.springframework.boot:spring-boot-starter-security:3.2.0'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+    runtimeOnly 'org.postgresql:postgresql:42.6.0'
+}
+
+group = 'org.example'
+version = '1.0'
+description = 'backend'
+java.sourceCompatibility = JavaVersion.VERSION_17
+
+def getRequiredProperty(String name) {
+    return project.findProperty("deploy.$name") ?:
+            System.getenv("DEPLOY_${name.toUpperCase()}")
+            throw new GradleException("Не задано обязательное свойство: deploy.$name")
+}
+
+ssh.settings {
+    knownHosts = allowAnyHosts
+}
+
+tasks.register('scp') {
+    group = 'Deployment'
+    description = 'Deploys JAR via SCP'
+    dependsOn tasks.named('build')
+
+    notCompatibleWithConfigurationCache("SSH task doesn't support config cache")
+
+    doLast {
+        def remoteHost = getRequiredProperty('host')
+        def remoteUser = getRequiredProperty('user')
+        def remoteDir = getRequiredProperty('dir')
+        def sshKey = file("${System.getProperty('user.home')}/.ssh/id_rsa")
+
+        exec {
+            commandLine 'scp', '-i', sshKey.absolutePath,
+                    layout.buildDirectory.file("libs/backend-1.0-plain.jar").get().asFile.absolutePath,
+                    "$remoteUser@$remoteHost:~/$remoteDir/"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('testTask') {
+    doLast {
+        println 'test done completely!'
+    }
+}
+
+tasks.register('myCompile', JavaCompile) {
+    group = 'Build'
+    description = 'Аналог compileJava, но с другим выходным каталогом'
+
+    source = sourceSets.main.java
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = file("$buildDir/my-classes")
+
+    sourceCompatibility = JavaVersion.VERSION_17.toString()
+    targetCompatibility = JavaVersion.VERSION_17.toString()
+
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('music') {
+    notCompatibleWithConfigurationCache("")
+    dependsOn build
+    doLast {
+        println "music started"
+        exec {
+            workingDir "${projectDir}"
+            commandLine 'paplay', 'build/sounds/success.wav'
+            ignoreExitValue true
+        }
+    }
+}
+
+
+tasks.register('generateChecksums') {
+    group = 'Documentation'
+    description = 'Генерация MD5 и SHA1 для JAR-файла'
+
+    def jarFile = layout.buildDirectory.file("libs/${project.name}-${project.version}.jar")
+    def outputFile = layout.buildDirectory.file("checksums/checksums.txt")
+
+    inputs.file(jarFile)
+    outputs.file(outputFile)
+
+    doLast {
+        def file = jarFile.get().asFile
+        def md5 = MessageDigest.getInstance("MD5").digest(file.bytes).encodeHex().toString()
+        def sha1 = MessageDigest.getInstance("SHA-1").digest(file.bytes).encodeHex().toString()
+
+        outputFile.get().asFile.withWriter { writer ->
+            writer.write("MD5: ${md5}\nSHA1: ${sha1}")
+        }
+    }
+}
+
+tasks.register('updateManifest', Jar) {
+    notCompatibleWithConfigurationCache("Использует внешние команды")
+    group = 'Documentation'
+    description = 'Обновление MANIFEST.MF с хешами'
+    dependsOn tasks.named('jar'), tasks.named('generateChecksums')
+    archiveClassifier = 'updated'
+
+    from(zipTree(tasks.named('jar').get().archiveFile)) {
+        exclude 'META-INF/MANIFEST.MF'
+    }
+
+    doFirst {
+        def checksumFile = tasks.named('generateChecksums').get().outputs.files.singleFile
+        def lines = checksumFile.readLines()
+        def md5 = lines[0].split(': ')[1]
+        def sha1 = lines[1].split(': ')[1]
+
+        manifest {
+            attributes(
+                    'Implementation-Title': project.name,
+                    'Implementation-Version': project.version,
+                    'Created-By': "Gradle ${gradle.gradleVersion}",
+                    'MD5-Hash': md5,
+                    'SHA1-Hash': sha1
+            )
+        }
+    }
+}
+
+
+tasks.register('packageJavadoc', Zip) {
+    group = 'Documentation'
+    description = 'Упаковка Javadoc в отдельный архив'
+
+    dependsOn tasks.named('javadoc')
+    archiveClassifier = 'javadoc'
+    from tasks.named('javadoc')
+}
+
+tasks.register('doc') {
+    group = 'Documentation'
+    description = 'Полный процесс генерации документации'
+
+    dependsOn tasks.named('updateManifest'), tasks.named('packageJavadoc')
+
+    doLast {
+        logger.lifecycle("""
+        ===== Документация успешно сгенерирована! =====
+        Основной JAR: ${tasks.named('updateManifest').get().archiveFile.get()}
+        Документация: ${tasks.named('packageJavadoc').get().archiveFile.get()}
+        """)
+    }
+}
+
+tasks.named('javadoc', Javadoc) {
+    options {
+        encoding = 'UTF-8'
+        addBooleanOption('html5', true)
+        addStringOption('Xdoclint:none', '-quiet')
+        links = [
+                'https://docs.oracle.com/en/java/javase/17/docs/api/',
+                'https://docs.spring.io/spring-framework/docs/current/javadoc-api/'
+        ]
+    }
+
+    exclude '**/internal/**'
+}
+
+tasks.register('xml') {
+    group = 'Verification'
+    description = 'Validates all XML files in the project'
+
+    def xmlFiles = layout.files(
+            fileTree(projectDir) {
+                include '**/*.xml'
+                exclude 'build/**'
+            }
+    )
+
+    inputs.files(xmlFiles)
+
+    doLast {
+        xmlFiles.each { file ->
+            try {
+                def factory = SAXParserFactory.newInstance()
+                factory.setValidating(true)
+                def parser = factory.newSAXParser()
+                parser.parse(file, new DefaultHandler())
+                logger.lifecycle("[VALID] ${file.name}")
+            } catch (Exception e) {
+                logger.error("[INVALID] ${file.name}: ${e.message}")
+                throw new GradleException("XML validation failed for ${file.name}")
+            }
+        }
+    }
+}
+
+tasks.register('buildCustom', Jar) {
+    group = 'Build'
+    description = 'Создание исполняемого JAR'
+    dependsOn tasks.named('myCompile')
+
+    archiveBaseName = 'myapp-custom'
+    archiveVersion = '1.0'
+    manifest {
+        attributes(
+                'Main-Class': 'com.example.Main',
+                'Created-By': 'Gradle Custom Build'
+        )
+    }
+
+    from "$buildDir/classes-custom"
+
+    from sourceSets.main.resources
+
+    doLast {
+        println "JAR собран: ${archiveFile.get().asFile.absolutePath}"
+    }
+}
+
+tasks.register('myBuild') {
+    dependsOn tasks.named('buildCustom')
+}
+
+tasks.register('myClean') {
+    group = 'Build'
+    description = 'Удаляет все скомпилированные классы и временные файлы'
+
+    notCompatibleWithConfigurationCache('')
+
+    doLast {
+        def dirsToDelete = [
+                file("$buildDir"),
+                file("$projectDir/build/my-classes"),
+                file("$projectDir/build/classes-custom"),
+                file("$projectDir/build/checksums"),
+                file("$projectDir/build/sounds"),
+        ]
+
+        dirsToDelete.each { dir ->
+            if (dir.exists()) {
+                dir.deleteDir()
+                println "Удален каталог: ${dir.absolutePath}"
+            }
+        }
+
+        println "===== Очистка завершена ====="
+    }
+}
+
+tasks.register('alt') {
+    group = 'Build'
+    description = 'Создаёт альтернативную версию программы с заменами и упаковкой в JAR'
+
+    notCompatibleWithConfigurationCache('')
+
+    def altSrcDir = file("$buildDir/alt-src")
+    def altClassesDir = file("$buildDir/alt-classes")
+    def replacements = [
+            'AuthController': 'AltAuthController',
+            'JwtUtil'       : 'AltJwtUtil',
+            'myVariable'    : 'altVar'
+            // добавь свои замены
+    ]
+
+    dependsOn tasks.named('build')
+
+    doLast {
+        println "===== Создание альтернативной версии ====="
+
+        // Очистка и копирование исходников
+        delete altSrcDir
+        copy {
+            from 'src/main/java'
+            into altSrcDir
+        }
+
+        // Замены в .java-файлах
+        fileTree(altSrcDir).matching { include '**/*.java' }.each { file ->
+            def text = file.text
+            replacements.each { from, to ->
+                text = text.replaceAll("\\b${from}\\b", to)
+            }
+            file.text = text
+        }
+
+        // Переименование файлов по имени public класса
+        fileTree(altSrcDir).matching { include '**/*.java' }.each { file ->
+            def text = file.text
+            def matcher = text =~ /\bpublic\s+(class|interface|enum)\s+(\w+)/
+            if (matcher.find()) {
+                def className = matcher.group(2)
+                def expectedFileName = "${className}.java"
+                if (file.name != expectedFileName) {
+                    def renamed = new File(file.parentFile, expectedFileName)
+                    file.renameTo(renamed)
+                }
+            }
+        }
+
+        // Компиляция
+        delete altClassesDir
+        altClassesDir.mkdirs()
+
+        def srcFiles = fileTree(altSrcDir).files.collect { it.absolutePath }
+        def classpathStr = sourceSets.main.compileClasspath.asPath
+
+        def compiler = ToolProvider.getSystemJavaCompiler()
+        if (!compiler) throw new GradleException("Java Compiler не найден! Убедитесь, что используется JDK")
+
+        def result = compiler.run(
+                null, null, null,
+                '-d', altClassesDir.absolutePath,
+                '-classpath', classpathStr,
+                '-source', '17',
+                '-target', '17',
+                '-encoding', 'UTF-8',
+                *srcFiles
+        )
+        if (result != 0) {
+            throw new GradleException("Альтернативная компиляция завершилась с ошибкой")
+        }
+
+        // Создание JAR-файла
+        def jarFile = file("$buildDir/libs/${project.name}-${project.version}-alt.jar")
+        ant.jar(destfile: jarFile) {
+            fileset(dir: altClassesDir)
+            manifest {
+                attributes 'Main-Class':'com.example.AltAuthController' // поменяй на свой alt-main
+            }
+        }
+
+        println "✅ Альтернативный JAR создан: ${jarFile.absolutePath}"
+    }
+}
+
+tasks.register('team') {
+    group = 'Build'
+    description = 'Собирает два предыдущих коммита и архивирует их артефакты'
+
+    notCompatibleWithConfigurationCache("Использует git и временные изменения файлов")
+
+    doLast {
+        println "===== Начало сборки предыдущих версий ====="
+
+        def git = ['git']
+        def buildDirPath = "${project.buildDir}/team-builds"
+        def outputZip = file("${project.buildDir}/team-artifacts.zip")
+
+        // Получаем два предыдущих коммита
+        def commits = git + ['rev-list', '--max-count=2', 'HEAD']
+        def revisions = new ByteArrayOutputStream()
+        exec {
+            commandLine commits
+            standardOutput = revisions
+        }
+        def commitHashes = revisions.toString().readLines()
+        println "Ревизии для сборки: $commitHashes"
+
+        def originalBranch = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'
+            standardOutput = originalBranch
+        }
+        def branchName = originalBranch.toString().trim()
+
+        def counter = 1
+        commitHashes.each { commit ->
+            println "→ Чекаут коммита $commit"
+            exec {
+                commandLine 'git', 'checkout', commit
+            }
+
+            println "→ Сборка коммита $commit"
+            exec {
+                commandLine './gradlew', 'clean', 'build'
+            }
+
+            def jarFile = file("${project.buildDir}/libs/${project.name}-${project.version}.jar")
+            def destDir = file("${buildDirPath}/commit${counter}")
+            destDir.mkdirs()
+            copy {
+                from jarFile
+                into destDir
+                rename { "commit${counter}.jar" }
+            }
+
+            counter++
+        }
+
+        println "→ Возврат к исходной ветке $branchName"
+        exec {
+            commandLine 'git', 'checkout', branchName
+        }
+
+        println "→ Архивация результатов"
+        ant.zip(destfile: outputZip) {
+            fileset(dir: buildDirPath)
+        }
+
+        println "✅ ZIP-файл создан: ${outputZip.absolutePath}"
+    }
+}
+
+
