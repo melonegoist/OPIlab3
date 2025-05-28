@@ -1,8 +1,9 @@
 import org.xml.sax.helpers.DefaultHandler
-
 import javax.tools.ToolProvider
 import javax.xml.parsers.SAXParserFactory
 import java.security.MessageDigest
+import java.util.Properties
+
 
 plugins {
     id 'java'
@@ -24,13 +25,28 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
     runtimeOnly 'org.postgresql:postgresql:42.6.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-
 }
+
+
 
 group = 'org.example'
 version = '1.0'
 description = 'backend'
 java.sourceCompatibility = JavaVersion.VERSION_17
+
+
+
+ssh.settings {
+    knownHosts = allowAnyHosts
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+}
 
 def getRequiredProperty(String name) {
     return project.findProperty("deploy.$name") ?:
@@ -38,11 +54,10 @@ def getRequiredProperty(String name) {
             throw new GradleException("Не задано обязательное свойство: deploy.$name")
 }
 
-ssh.settings {
-    knownHosts = allowAnyHosts
-}
+
 
 //TODO: test native2ascii history diff report + functional tests(15)
+
 
 
 // task scp
@@ -67,14 +82,7 @@ tasks.register('scp') {
     }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-}
-
-tasks.withType(Javadoc).configureEach {
-    options.encoding = 'UTF-8'
-}
-
+// test
 tasks.register('testTask') {
     doLast {
         println 'test done completely!'
@@ -109,7 +117,6 @@ tasks.register('music') {
         }
     }
 }
-
 
 tasks.register('generateChecksums') {
     group = 'Documentation'
@@ -291,6 +298,7 @@ tasks.register('alt') {
     group = 'Build'
     description = 'Создаёт альтернативную версию программы с заменами и упаковкой в JAR'
 
+    //TODO
     notCompatibleWithConfigurationCache('')
 
     def altSrcDir = file("$buildDir/alt-src")
@@ -299,7 +307,7 @@ tasks.register('alt') {
             'AuthController': 'AltAuthController',
             'JwtUtil'       : 'AltJwtUtil',
             'myVariable'    : 'altVar'
-            // добавь свои замены
+            //TODO добавь свои замены
     ]
 
     dependsOn tasks.named('build')
@@ -307,7 +315,6 @@ tasks.register('alt') {
     doLast {
         println "===== Создание альтернативной версии ====="
 
-        // Очистка и копирование исходников
         delete altSrcDir
         copy {
             from 'src/main/java'
@@ -442,5 +449,58 @@ tasks.register('team') {
     }
 }
 
+tasks.register('native2ascii') {
+    group = 'I18n'
+    description = 'Преобразование файлов локализации в ASCII-формат'
 
+    def resourcesDir = file('src/main/resources')
+    def outputDir = file("$buildDir/native2ascii")
+
+    inputs.dir(resourcesDir)
+    outputs.dir(outputDir)
+
+    doLast {
+        println "Начато преобразование native2ascii..."
+
+        // Создаем выходную директорию
+        outputDir.mkdirs()
+
+        // Обрабатываем все .properties файлы
+        fileTree(resourcesDir).matching {
+            include '**/*.properties'
+        }.each { sourceFile ->
+            try {
+                // Получаем относительный путь
+                def relativePath = resourcesDir.toURI().relativize(sourceFile.toURI()).getPath()
+                def targetFile = new File(outputDir, relativePath)
+
+                // Создаем целевую директорию
+                targetFile.parentFile.mkdirs()
+
+                // Читаем файл с правильной кодировкой
+                String content = sourceFile.getText('UTF-8')
+
+                // Преобразуем содержимое
+                StringBuilder convertedContent = new StringBuilder()
+                for (int i = 0; i < content.length(); i++) {
+                    char c = content.charAt(i)
+                    if (c > 127) {
+                        convertedContent.append(String.format("\\u%04x", (int) c))
+                    } else {
+                        convertedContent.append(c)
+                    }
+                }
+
+                // Записываем результат в ISO-8859-1
+                targetFile.setText(convertedContent.toString(), 'UTF-8')
+
+                println "Обработан: ${relativePath}"
+            } catch (Exception e) {
+                throw new GradleException("Ошибка обработки файла ${sourceFile.name}", e)
+            }
+        }
+
+        println "Преобразование завершено. Результат в ${outputDir}"
+    }
+}
 
