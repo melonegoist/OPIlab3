@@ -588,7 +588,7 @@ tasks.register('history') {
 def tryCompile() {
     try {
         exec {
-            commandLine './gradlew', 'compile', '--quiet', '--no-configuration-cache'
+            commandLine './gradlew', 'myCompile', '--quiet', '--no-configuration-cache'
             standardOutput = System.out
             errorOutput = System.err
         }
@@ -657,7 +657,7 @@ def deleteTempDir(File tempDir) {
 }
 
 def getGitDiff(String commit1, String commit2) {
-    def output = new ByteArrayOutputStream()
+    val output = new ByteArrayOutputStream()
     exec {
         commandLine 'git', 'diff', "${commit1}..${commit2}"
         standardOutput = output
