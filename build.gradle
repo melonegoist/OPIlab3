@@ -2,7 +2,6 @@ import org.xml.sax.helpers.DefaultHandler
 import javax.tools.ToolProvider
 import javax.xml.parsers.SAXParserFactory
 import java.security.MessageDigest
-import java.util.Properties
 
 
 plugins {
@@ -56,7 +55,7 @@ def getRequiredProperty(String name) {
 
 
 
-//TODO: test native2ascii history diff report + functional tests(15)
+//TODO: test history diff report + functional tests(15)
 
 
 
@@ -504,3 +503,164 @@ tasks.register('native2ascii') {
     }
 }
 
+tasks.register('history') {
+    group = 'Version Control'
+    description = 'Находит последнюю рабочую версию в истории Git'
+
+    def successFile = file("$buildDir/last-working-version.txt")
+    def diffFile = file("$buildDir/failing-changes.diff")
+
+    doLast {
+        println "🔍 Поиск последней рабочей версии..."
+
+        try {
+            // 1. Проверяем, что мы в git-репозитории
+            def isGitRepo = file('.git').exists()
+            if (!isGitRepo) {
+                throw new GradleException("Текущая директория не является git-репозиторием")
+            }
+
+            // 2. Сохраняем текущее состояние
+            def originalBranch = getCurrentGitBranch()
+            println "Текущая ветка: $originalBranch"
+
+            // 3. Создаем временную директорию для проверки коммитов
+            def tempDir = file("$buildDir/git-history-check")
+            tempDir.mkdirs()
+
+            try {
+                // 4. Получаем историю коммитов
+                def commits = getGitHistory()
+                if (commits.empty) {
+                    throw new GradleException("Git история не найдена")
+                }
+
+                // 5. Проверяем текущую версию
+                if (tryCompile()) {
+                    println "✅ Текущая версия успешно компилируется"
+                    successFile.text = "Current version compiles successfully"
+                    return
+                }
+
+                // 6. Ищем последнюю рабочую версию
+                String lastGoodCommit = null
+                String firstBadCommit = commits[0]
+
+                for (commit in commits) {
+                    println "Проверяем коммит: ${commit.take(7)}..."
+
+                    // Клонируем репозиторий во временную директорию
+                    cloneCommitToTempDir(commit, tempDir)
+
+                    if (tryCompileInTempDir(tempDir)) {
+                        lastGoodCommit = commit
+                        println "✅ Найдена рабочая версия: ${commit.take(7)}"
+                        break
+                    }
+                }
+
+                if (lastGoodCommit) {
+                    // 7. Получаем diff между коммитами
+                    def diff = getGitDiff(lastGoodCommit, firstBadCommit)
+                    diffFile.text = diff
+                    successFile.text = """
+                    |Последняя рабочая версия: $lastGoodCommit
+                    |Первая нерабочая версия: $firstBadCommit
+                    |Diff сохранен в: ${diffFile}
+                    """.stripMargin()
+
+                    println "📝 Diff сохранён в: ${diffFile}"
+                    println "💾 Результаты сохранены в: ${successFile}"
+                } else {
+                    throw new GradleException("Не найдено ни одной рабочей версии")
+                }
+            } finally {
+                // 8. Удаляем временную директорию
+                deleteTempDir(tempDir)
+            }
+        } catch (Exception e) {
+            throw new GradleException("Ошибка при выполнении задачи history: ${e.message}")
+        }
+    }
+}
+
+// Вспомогательные функции
+def tryCompile() {
+    try {
+        exec {
+            commandLine './gradlew', 'compile', '--quiet', '--no-configuration-cache'
+            standardOutput = System.out
+            errorOutput = System.err
+        }
+        return true
+    } catch (Exception e) {
+        return false
+    }
+}
+
+def tryCompileInTempDir(File dir) {
+    try {
+        exec {
+            workingDir dir
+            commandLine './gradlew', 'myCompile', '--quiet', '--no-configuration-cache'
+            standardOutput = System.out
+            errorOutput = System.err
+        }
+        return true
+    } catch (Exception e) {
+        return false
+    }
+}
+
+def getGitHistory() {
+    def output = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'rev-list', '--reverse', 'HEAD'
+        standardOutput = output
+    }
+    return output.toString().split('\n').toList()
+}
+
+def getCurrentGitBranch() {
+    def output = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'branch', '--show-current'
+        standardOutput = output
+    }
+    return output.toString().trim()
+}
+
+def cloneCommitToTempDir(String commit, File tempDir) {
+    // Очищаем временную директорию
+    deleteTempDir(tempDir)
+    tempDir.mkdirs()
+
+    // Клонируем текущий репозиторий
+    exec {
+        workingDir tempDir
+        commandLine 'git', 'clone', file('.').absolutePath, '.'
+    }
+
+    // Переключаемся на нужный коммит
+    exec {
+        workingDir tempDir
+        commandLine 'git', 'checkout', commit
+    }
+}
+
+def deleteTempDir(File tempDir) {
+    if (tempDir.exists()) {
+        delete {
+            delete tempDir
+        }
+    }
+}
+
+def getGitDiff(String commit1, String commit2) {
+    def output = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'diff', "${commit1}..${commit2}"
+        standardOutput = output
+    }
+    return output.toString()
+}
