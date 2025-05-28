@@ -657,7 +657,7 @@ def deleteTempDir(File tempDir) {
 }
 
 def getGitDiff(String commit1, String commit2) {
-    val output = new ByteArrayOutputStream()
+    def output = new ByteArrayOutputStream()
     exec {
         commandLine 'git', 'diff', "${commit1}..${commit2}"
         standardOutput = output
