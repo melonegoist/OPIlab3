@@ -9,6 +9,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class CorsConfig {
+    int letter=1;
 
     @Bean
     public WebMvcConfigurer corsConfigurer() {
