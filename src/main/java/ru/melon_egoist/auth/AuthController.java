@@ -17,7 +17,6 @@ import ru.melon_egoist.auth.registration.RegistrationRequest;
 
 @RestController
 public class AuthController {
-    // qdqqdqq
     @Autowired
     private AuthenticationManager authenticationManager;
 
