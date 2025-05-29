@@ -723,6 +723,8 @@ def createDefaultConfig(File configFile) {
     # Игнорировать тесты (true/false)
     ignore.tests=true
     """.stripIndent().trim()
+
+    println('(((((((')
 }
 
 // Загружает защищённые пути из конфига
