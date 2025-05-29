@@ -177,7 +177,7 @@ public class PagesTest {
         String color = button.getCssValue("background-color");
         Assertions.assertTrue(color.contains("green") || color.contains("red"));
     }
-//
+
     private void login(String username, String password) {
         driver.findElement(By.id("login-field")).sendKeys(username);
         driver.findElement(By.id("password-field")).sendKeys(password);

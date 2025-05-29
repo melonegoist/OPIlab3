@@ -806,3 +806,8 @@ tasks.register('myTest', Test) {
         }
     }
 }
+
+tasks.register("report") {
+    group = ''
+    description = ''
+}
