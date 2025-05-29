@@ -509,86 +509,76 @@ tasks.register('native2ascii') {
 
 tasks.register('history') {
     group = 'Version Control'
-    description = 'Находит последнюю рабочую версию в истории Git'
+    description = 'Find last working version in git history'
 
     def successFile = file("$buildDir/last-working-version.txt")
     def diffFile = file("$buildDir/failing-changes.diff")
 
     doLast {
-        println "🔍 Поиск последней рабочей версии..."
+        println "Searching for a last working version..."
 
         try {
-            // 1. Проверяем, что мы в git-репозитории
             def isGitRepo = file('.git').exists()
             if (!isGitRepo) {
-                throw new GradleException("Текущая директория не является git-репозиторием")
+                throw new GradleException("Current dir isn't a git repo")
             }
 
-            // 2. Сохраняем текущее состояние
             def originalBranch = getCurrentGitBranch()
-            println "Текущая ветка: $originalBranch"
+            println "Current branch: $originalBranch"
 
-            // 3. Создаем временную директорию для проверки коммитов
             def tempDir = file("$buildDir/git-history-check")
             tempDir.mkdirs()
 
             try {
-                // 4. Получаем историю коммитов
                 def commits = getGitHistory()
                 if (commits.empty) {
-                    throw new GradleException("Git история не найдена")
+                    throw new GradleException("Git history wasn't found")
                 }
 
-                // 5. Проверяем текущую версию
                 if (tryCompile()) {
-                    println "✅ Текущая версия успешно компилируется"
+                    println "✅ Current version compiles successfully"
                     successFile.text = "Current version compiles successfully"
                     return
                 }
 
-                // 6. Ищем последнюю рабочую версию
                 String lastGoodCommit = null
                 String firstBadCommit = commits[0]
 
                 for (commit in commits) {
-                    println "Проверяем коммит: ${commit.take(7)}..."
+                    println "Checking commit: ${commit.take(7)}..."
 
-                    // Клонируем репозиторий во временную директорию
                     cloneCommitToTempDir(commit, tempDir)
 
                     if (tryCompileInTempDir(tempDir)) {
                         lastGoodCommit = commit
-                        println "✅ Найдена рабочая версия: ${commit.take(7)}"
+                        println "✅ Working version was found: ${commit.take(7)}"
                         break
                     }
                 }
 
                 if (lastGoodCommit) {
-                    // 7. Получаем diff между коммитами
                     def diff = getGitDiff(lastGoodCommit, firstBadCommit)
                     diffFile.text = diff
                     successFile.text = """
-                    |Последняя рабочая версия: $lastGoodCommit
-                    |Первая нерабочая версия: $firstBadCommit
-                    |Diff сохранен в: ${diffFile}
+                    |Last working version: $lastGoodCommit
+                    |First non-working version: $firstBadCommit
+                    |Diff was saved in: ${diffFile}
                     """.stripMargin()
 
-                    println "📝 Diff сохранён в: ${diffFile}"
-                    println "💾 Результаты сохранены в: ${successFile}"
+                    println "Diff was saved in: ${diffFile}"
+                    println "Results were saved in: ${successFile}"
                 } else {
-                    throw new GradleException("Не найдено ни одной рабочей версии")
+                    throw new GradleException("None of working dirs were found...")
                 }
             } finally {
-                // 8. Удаляем временную директорию
                 deleteTempDir(tempDir)
             }
         } catch (Exception e) {
-            throw new GradleException("Ошибка при выполнении задачи history: ${e.message}")
+            throw new GradleException("Error with handling history task: ${e.message}")
         }
     }
 }
 
-// Вспомогательные функции
 def tryCompile() {
     try {
         exec {
@@ -639,13 +629,11 @@ def cloneCommitToTempDir(String commit, File tempDir) {
     deleteTempDir(tempDir)
     tempDir.mkdirs()
 
-    // Клонируем текущий репозиторий
     exec {
         workingDir tempDir
         commandLine 'git', 'clone', file('.').absolutePath, '.'
     }
 
-    // Переключаемся на нужный коммит
     exec {
         workingDir tempDir
         commandLine 'git', 'checkout', commit
@@ -671,65 +659,53 @@ def getGitDiff(String commit1, String commit2) {
 
 tasks.register('diff') {
     group = 'Version Control'
-    description = 'Автоматический коммит при безопасных изменениях'
+    description = 'Auto commit for protected changes'
 
-    // Указываем, что задача зависит от обработки ресурсов
     dependsOn 'processResources'
 
-    // Файл конфигурации в исходниках (не в скомпилированных ресурсах)
     def configFile = file('src/main/resources/diff-config.properties')
     def allowedChangesFile = file('allowed-changes.txt')
 
     doLast {
-        println "🔍 Проверка изменений в рабочей копии..."
+        println "Examining changes in working dir..."
 
-        // 1. Проверка git-репозитория
         if (!file('.git').exists()) {
-            throw new GradleException("Текущая директория не является git-репозиторием")
+            throw new GradleException("Current dir isn't a git repo")
         }
 
-        // 2. Проверка существования конфига
         if (!configFile.exists()) {
             createDefaultConfig(configFile)
-            println "ℹ️ Создан файл конфигурации по умолчанию: ${configFile}"
+            println "Default config file was created: ${configFile}"
         }
 
-        // 3. Загрузка защищённых путей
         def protectedPaths = loadProtectedPaths(configFile)
-        println "🛡️ Защищенные пути: ${protectedPaths.join(', ')}"
+        println "Protected paths: ${protectedPaths.join(', ')}"
 
-        // 4. Получение изменённых файлов
         def changedFiles = getChangedFiles()
         if (changedFiles.empty) {
-            println "ℹ️ Нет изменений для коммита"
+            println "No changes for commit"
+
             return
         }
 
-        // 5. Проверка изменений
         if (hasProtectedChanges(changedFiles, protectedPaths)) {
-            println "❌ Обнаружены изменения в защищенных путях!"
-            println "Измененные файлы:\n${changedFiles.join('\n')}"
-            throw new GradleException("Коммит запрещен: изменения в защищенных классах")
+            println "Some changes in protected files were detected"
+            println "Changed files:\n${changedFiles.join('\n')}"
+            throw new GradleException("Commit was blocked: changes in protected classes")
         }
 
-        // 6. Коммит разрешённых изменений
         commitChanges(allowedChangesFile)
     }
 }
 
-// Создаёт конфиг по умолчанию, если его нет
 def createDefaultConfig(File configFile) {
     configFile.parentFile.mkdirs()
     configFile.text = """
-    # Защищённые пути (через запятую)
-    protected.paths=src/main/java/ru/melon_egoist/core/,src/main/java/ru/melon_egoist/config/
-    
-    # Игнорировать тесты (true/false)
+    protected.paths=src/main/java/ru/melon_egoist/auth/,src/main/java/ru/melon_egoist/graph
     ignore.tests=true
     """.stripIndent().trim()
 }
 
-// Загружает защищённые пути из конфига
 def loadProtectedPaths(File configFile) {
     def props = new Properties()
     configFile.withInputStream { props.load(it) }
@@ -739,7 +715,6 @@ def loadProtectedPaths(File configFile) {
             .collect { it.trim() }
             .findAll { it }
 
-    // Добавляем игнорирование тестов, если нужно
     if (props.getProperty('ignore.tests', 'true').toBoolean()) {
         paths += 'src/test/'
     }
@@ -747,7 +722,6 @@ def loadProtectedPaths(File configFile) {
     return paths
 }
 
-// Получает список изменённых файлов
 def getChangedFiles() {
     def output = new ByteArrayOutputStream()
     exec {
@@ -757,7 +731,6 @@ def getChangedFiles() {
     return output.toString().split('\n').findAll { it }.collect { it.trim() }
 }
 
-// Проверяет наличие защищённых изменений
 def hasProtectedChanges(List<String> changedFiles, List<String> protectedPaths) {
     return changedFiles.any { file ->
         protectedPaths.any { path ->
@@ -766,35 +739,32 @@ def hasProtectedChanges(List<String> changedFiles, List<String> protectedPaths) 
     }
 }
 
-// Выполняет коммит
 def commitChanges(File messageFile) {
-    // Добавляем все изменения
     exec { commandLine 'git', 'add', '.' }
 
-    // Сообщение коммита
     def message = messageFile.exists() ?
             messageFile.text.trim() :
             "Autocommit: " + new Date().toString()
 
-    // Коммит
     exec {
         commandLine 'git', 'commit', '-m', message
-        ignoreExitValue = true // Не падать, если нечего коммитить
+        ignoreExitValue = true
     }
 
-    println "💾 Выполнен коммит: ${message}"
+    println "Commit done: ${message}"
 }
 
 import groovy.xml.XmlSlurper
 
 tasks.register('myTest', Test) {
     group = 'Verification'
-    description = 'Альтернативная задача для запуска тестов'
+    description = 'Alt variation of default test task'
 
-    dependsOn 'build'
-    mustRunAfter 'build'
+    dependsOn 'myBuild'
+    mustRunAfter 'myBuild'
 
     useJUnitPlatform()
+
     ignoreFailures = true
 
     reports {
@@ -825,16 +795,16 @@ tasks.register('myTest', Test) {
 
         int passed = total - failed - skipped
 
-        println "\n📊 Результаты тестов:"
-        println "✅ Пройдено: ${passed}"
-        println "❌ Провалено: ${failed}"
-        println "⚠️ Пропущено: ${skipped}"
-        println "📄 Отчёт: ${file("${buildDir}/reports/my-tests/index.html").toURI()}"
+        println "\nTests results:"
+        println "Tests completed: ${passed}"
+        println "Tests failed: ${failed}"
+        println "Tests skipped: ${skipped}"
+        println "Report: ${file("${buildDir}/reports/my-tests/index.html").toURI()}"
 
         if (failed > 0) {
-            println "🚨 Есть ошибки. Проверь отчёт!"
+            println "Build has some failures!"
         } else {
-            println "🎉 Все тесты успешно пройдены!"
+            println "All tests were done successfully!"
         }
     }
 }
