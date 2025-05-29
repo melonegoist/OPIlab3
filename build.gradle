@@ -667,59 +667,83 @@ def getGitDiff(String commit1, String commit2) {
 
 tasks.register('diff') {
     group = 'Version Control'
-    description = 'Автоматический коммит, если изменения не затрагивают запрещенные классы'
+    description = 'Автоматический коммит при безопасных изменениях'
 
-    def configFile = file('diff-config.properties')
+    // Указываем, что задача зависит от обработки ресурсов
+    dependsOn 'processResources'
+
+    // Файл конфигурации в исходниках (не в скомпилированных ресурсах)
+    def configFile = file('src/main/resources/diff-config.properties')
     def allowedChangesFile = file('allowed-changes.txt')
 
     doLast {
         println "🔍 Проверка изменений в рабочей копии..."
 
-        // 1. Проверяем, что мы в git-репозитории
+        // 1. Проверка git-репозитория
         if (!file('.git').exists()) {
             throw new GradleException("Текущая директория не является git-репозиторием")
         }
 
-        // 2. Загружаем конфигурацию
-        def protectedClasses = loadProtectedClasses(configFile)
-        println "Защищенные классы: ${protectedClasses.join(', ')}"
+        // 2. Проверка существования конфига
+        if (!configFile.exists()) {
+            createDefaultConfig(configFile)
+            println "ℹ️ Создан файл конфигурации по умолчанию: ${configFile}"
+        }
 
-        // 3. Получаем список измененных файлов
+        // 3. Загрузка защищённых путей
+        def protectedPaths = loadProtectedPaths(configFile)
+        println "🛡️ Защищенные пути: ${protectedPaths.join(', ')}"
+
+        // 4. Получение изменённых файлов
         def changedFiles = getChangedFiles()
         if (changedFiles.empty) {
             println "ℹ️ Нет изменений для коммита"
             return
         }
 
-        // 4. Проверяем, есть ли изменения в защищенных классах
-        def hasProtectedChanges = changedFiles.any { file ->
-            protectedClasses.any { pattern ->
-                file.contains(pattern)
-            }
-        }
-
-        if (hasProtectedChanges) {
-            println "❌ Обнаружены изменения в защищенных классах!"
+        // 5. Проверка изменений
+        if (hasProtectedChanges(changedFiles, protectedPaths)) {
+            println "❌ Обнаружены изменения в защищенных путях!"
             println "Измененные файлы:\n${changedFiles.join('\n')}"
             throw new GradleException("Коммит запрещен: изменения в защищенных классах")
         }
 
-        // 5. Если есть разрешенные изменения - коммитим
-        println "✅ Все изменения разрешены для коммита"
+        // 6. Коммит разрешённых изменений
         commitChanges(allowedChangesFile)
     }
 }
 
-def loadProtectedClasses(File configFile) {
-    if (!configFile.exists()) {
-        throw new GradleException("Конфигурационный файл ${configFile.name} не найден")
-    }
-
-    def props = new Properties()
-    configFile.withInputStream { props.load(it) }
-    return props.getProperty('protected.classes', '').split(',').collect { it.trim() }
+// Создаёт конфиг по умолчанию, если его нет
+def createDefaultConfig(File configFile) {
+    configFile.parentFile.mkdirs()
+    configFile.text = """
+    # Защищённые пути (через запятую)
+    protected.paths=src/main/java/ru/melon_egoist/core/,src/main/java/ru/melon_egoist/config/
+    
+    # Игнорировать тесты (true/false)
+    ignore.tests=true
+    """.stripIndent().trim()
 }
 
+// Загружает защищённые пути из конфига
+def loadProtectedPaths(File configFile) {
+    def props = new Properties()
+    configFile.withInputStream { props.load(it) }
+
+    def paths = props.getProperty('protected.paths', '')
+            .split(',')
+            .collect { it.trim() }
+            .findAll { it }
+
+    // Добавляем игнорирование тестов, если нужно
+    if (props.getProperty('ignore.tests', 'true').toBoolean()) {
+        paths += 'src/test/'
+    }
+
+    return paths
+}
+
+// Получает список изменённых файлов
 def getChangedFiles() {
     def output = new ByteArrayOutputStream()
     exec {
@@ -729,19 +753,30 @@ def getChangedFiles() {
     return output.toString().split('\n').findAll { it }.collect { it.trim() }
 }
 
+// Проверяет наличие защищённых изменений
+def hasProtectedChanges(List<String> changedFiles, List<String> protectedPaths) {
+    return changedFiles.any { file ->
+        protectedPaths.any { path ->
+            file.contains(path)
+        }
+    }
+}
+
+// Выполняет коммит
 def commitChanges(File messageFile) {
     // Добавляем все изменения
     exec { commandLine 'git', 'add', '.' }
 
-    // Создаем сообщение коммита
-    def commitMessage = messageFile.exists() ?
+    // Сообщение коммита
+    def message = messageFile.exists() ?
             messageFile.text.trim() :
             "Autocommit: " + new Date().toString()
 
-    // Выполняем коммит
+    // Коммит
     exec {
-        commandLine 'git', 'commit', '-m', commitMessage
+        commandLine 'git', 'commit', '-m', message
+        ignoreExitValue = true // Не падать, если нечего коммитить
     }
 
-    println "💾 Выполнен коммит: ${commitMessage}"
+    println "💾 Выполнен коммит: ${message}"
 }
