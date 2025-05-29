@@ -55,7 +55,7 @@ def getRequiredProperty(String name) {
 
 
 
-//TODO: test history diff report + functional tests(15)
+//TODO: test diff report + functional tests(15)
 
 
 
@@ -663,4 +663,85 @@ def getGitDiff(String commit1, String commit2) {
         standardOutput = output
     }
     return output.toString()
+}
+
+tasks.register('diff') {
+    group = 'Version Control'
+    description = 'Автоматический коммит, если изменения не затрагивают запрещенные классы'
+
+    def configFile = file('diff-config.properties')
+    def allowedChangesFile = file('allowed-changes.txt')
+
+    doLast {
+        println "🔍 Проверка изменений в рабочей копии..."
+
+        // 1. Проверяем, что мы в git-репозитории
+        if (!file('.git').exists()) {
+            throw new GradleException("Текущая директория не является git-репозиторием")
+        }
+
+        // 2. Загружаем конфигурацию
+        def protectedClasses = loadProtectedClasses(configFile)
+        println "Защищенные классы: ${protectedClasses.join(', ')}"
+
+        // 3. Получаем список измененных файлов
+        def changedFiles = getChangedFiles()
+        if (changedFiles.empty) {
+            println "ℹ️ Нет изменений для коммита"
+            return
+        }
+
+        // 4. Проверяем, есть ли изменения в защищенных классах
+        def hasProtectedChanges = changedFiles.any { file ->
+            protectedClasses.any { pattern ->
+                file.contains(pattern)
+            }
+        }
+
+        if (hasProtectedChanges) {
+            println "❌ Обнаружены изменения в защищенных классах!"
+            println "Измененные файлы:\n${changedFiles.join('\n')}"
+            throw new GradleException("Коммит запрещен: изменения в защищенных классах")
+        }
+
+        // 5. Если есть разрешенные изменения - коммитим
+        println "✅ Все изменения разрешены для коммита"
+        commitChanges(allowedChangesFile)
+    }
+}
+
+def loadProtectedClasses(File configFile) {
+    if (!configFile.exists()) {
+        throw new GradleException("Конфигурационный файл ${configFile.name} не найден")
+    }
+
+    def props = new Properties()
+    configFile.withInputStream { props.load(it) }
+    return props.getProperty('protected.classes', '').split(',').collect { it.trim() }
+}
+
+def getChangedFiles() {
+    def output = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'diff', '--name-only', 'HEAD'
+        standardOutput = output
+    }
+    return output.toString().split('\n').findAll { it }.collect { it.trim() }
+}
+
+def commitChanges(File messageFile) {
+    // Добавляем все изменения
+    exec { commandLine 'git', 'add', '.' }
+
+    // Создаем сообщение коммита
+    def commitMessage = messageFile.exists() ?
+            messageFile.text.trim() :
+            "Autocommit: " + new Date().toString()
+
+    // Выполняем коммит
+    exec {
+        commandLine 'git', 'commit', '-m', commitMessage
+    }
+
+    println "💾 Выполнен коммит: ${commitMessage}"
 }
