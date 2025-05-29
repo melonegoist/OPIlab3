@@ -17,10 +17,10 @@ import java.util.function.Function;
 public class JwtUtil {
 
     @Value("${jwt.secret}")
-    private String SECRET_KEY; // should be const from prop
+    String SECRET_KEY; // should be const from prop
 
     @Value("${jwt.expiration}")
-    private int EXPIRATION_TIME;
+    int EXPIRATION_TIME;
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
