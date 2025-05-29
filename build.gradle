@@ -24,6 +24,10 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
     runtimeOnly 'org.postgresql:postgresql:42.6.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testImplementation 'org.seleniumhq.selenium:selenium-java:4.20.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
 
@@ -55,7 +59,7 @@ def getRequiredProperty(String name) {
 
 
 
-//TODO: test diff report + functional tests(15)
+//TODO: test report + functional tests(15)
 
 
 
@@ -723,9 +727,6 @@ def createDefaultConfig(File configFile) {
     # Игнорировать тесты (true/false)
     ignore.tests=true
     """.stripIndent().trim()
-
-    println('(((((((')
-    println('hiiii')
 }
 
 // Загружает защищённые пути из конфига
@@ -782,4 +783,58 @@ def commitChanges(File messageFile) {
     }
 
     println "💾 Выполнен коммит: ${message}"
+}
+
+import groovy.xml.XmlSlurper
+
+tasks.register('myTest', Test) {
+    group = 'Verification'
+    description = 'Альтернативная задача для запуска тестов'
+
+    dependsOn 'build'
+    mustRunAfter 'build'
+
+    useJUnitPlatform()
+    ignoreFailures = true
+
+    reports {
+        html.outputLocation = file("${buildDir}/reports/my-tests")
+        junitXml.outputLocation = file("${buildDir}/test-results/my-tests")
+    }
+
+    filter {
+        includeTestsMatching "*Test"
+    }
+
+    doLast {
+        def resultsDir = file("${buildDir}/test-results/my-tests")
+        def resultFiles = fileTree(resultsDir).matching {
+            include "**/*.xml"
+        }
+
+        int total = 0, failed = 0, skipped = 0
+
+        resultFiles.each { file ->
+            def testSuite = new XmlSlurper().parse(file)
+
+            total += (testSuite.@tests.text() ?: "0").toInteger()
+            failed += ((testSuite.@failures.text() ?: "0").toInteger()
+                    + (testSuite.@errors.text() ?: "0").toInteger())
+            skipped += (testSuite.@skipped.text() ?: "0").toInteger()
+        }
+
+        int passed = total - failed - skipped
+
+        println "\n📊 Результаты тестов:"
+        println "✅ Пройдено: ${passed}"
+        println "❌ Провалено: ${failed}"
+        println "⚠️ Пропущено: ${skipped}"
+        println "📄 Отчёт: ${file("${buildDir}/reports/my-tests/index.html").toURI()}"
+
+        if (failed > 0) {
+            println "🚨 Есть ошибки. Проверь отчёт!"
+        } else {
+            println "🎉 Все тесты успешно пройдены!"
+        }
+    }
 }
