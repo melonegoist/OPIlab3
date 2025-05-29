@@ -54,12 +54,12 @@ tasks.withType(Javadoc).configureEach {
 def getRequiredProperty(String name) {
     return project.findProperty("deploy.$name") ?:
             System.getenv("DEPLOY_${name.toUpperCase()}")
-            throw new GradleException("Не задано обязательное свойство: deploy.$name")
+            throw new GradleException("Required property not specified: deploy.$name")
 }
 
 
 
-//TODO: test report + functional tests(15)
+//TODO: report
 
 
 
@@ -95,7 +95,7 @@ tasks.register('testTask') {
 // task compile
 tasks.register('myCompile', JavaCompile) {
     group = 'Build'
-    description = 'Аналог compileJava, но с другим выходным каталогом'
+    description = 'Similar to compileJava but with a different output directory'
 
     source = sourceSets.main.java
     classpath = sourceSets.main.compileClasspath
@@ -110,12 +110,12 @@ tasks.register('myCompile', JavaCompile) {
 // task music
 tasks.register('music') {
     notCompatibleWithConfigurationCache("")
-    dependsOn build
+    dependsOn myBuild
     doLast {
         println "music started"
         exec {
             workingDir "${projectDir}"
-            commandLine 'paplay', 'build/sounds/success.wav'
+            commandLine 'paplay', 'src/main/resources/success.wav'
             ignoreExitValue true
         }
     }
@@ -123,7 +123,7 @@ tasks.register('music') {
 
 tasks.register('generateChecksums') {
     group = 'Documentation'
-    description = 'Генерация MD5 и SHA1 для JAR-файла'
+    description = 'Generate MD5 and SHA1 for JAR file'
 
     def jarFile = layout.buildDirectory.file("libs/${project.name}-${project.version}.jar")
     def outputFile = layout.buildDirectory.file("checksums/checksums.txt")
@@ -174,7 +174,7 @@ tasks.register('updateManifest', Jar) {
 
 tasks.register('packageJavadoc', Zip) {
     group = 'Documentation'
-    description = 'Упаковка Javadoc в отдельный архив'
+    description = 'Packing Javadoc into a separate archive'
 
     dependsOn tasks.named('javadoc')
     archiveClassifier = 'javadoc'
@@ -184,15 +184,15 @@ tasks.register('packageJavadoc', Zip) {
 // task doc
 tasks.register('doc') {
     group = 'Documentation'
-    description = 'Полный процесс генерации документации'
+    description = 'Complete documentation generation process'
 
     dependsOn tasks.named('updateManifest'), tasks.named('packageJavadoc')
 
     doLast {
         logger.lifecycle("""
-        ===== Документация успешно сгенерирована! =====
-        Основной JAR: ${tasks.named('updateManifest').get().archiveFile.get()}
-        Документация: ${tasks.named('packageJavadoc').get().archiveFile.get()}
+        ===== Documentation successfully generated! =====
+        Main JAR: ${tasks.named('updateManifest').get().archiveFile.get()}
+        Documentation: ${tasks.named('packageJavadoc').get().archiveFile.get()}
         """)
     }
 }
@@ -244,7 +244,7 @@ tasks.register('xml') {
 // task build
 tasks.register('buildCustom', Jar) {
     group = 'Build'
-    description = 'Создание исполняемого JAR'
+    description = 'Creating an executable JAR'
     dependsOn tasks.named('myCompile')
 
     archiveBaseName = 'myapp-custom'
@@ -261,7 +261,7 @@ tasks.register('buildCustom', Jar) {
     from sourceSets.main.resources
 
     doLast {
-        println "JAR собран: ${archiveFile.get().asFile.absolutePath}"
+        println "JAR built: ${archiveFile.get().asFile.absolutePath}"
     }
 }
 
@@ -272,7 +272,7 @@ tasks.register('myBuild') {
 // task clean
 tasks.register('myClean') {
     group = 'Build'
-    description = 'Удаляет все скомпилированные классы и временные файлы'
+    description = 'Removes all compiled classes and temporary files.'
 
     notCompatibleWithConfigurationCache('')
 
@@ -288,35 +288,34 @@ tasks.register('myClean') {
         dirsToDelete.each { dir ->
             if (dir.exists()) {
                 dir.deleteDir()
-                println "Удален каталог: ${dir.absolutePath}"
+                println "Catalog deleted: ${dir.absolutePath}"
             }
         }
 
-        println "===== Очистка завершена ====="
+        println "===== Clean completed ====="
     }
 }
 
 // task alt
 tasks.register('alt') {
     group = 'Build'
-    description = 'Создаёт альтернативную версию программы с заменами и упаковкой в JAR'
+    description = 'Creates an alternative version of the program with replacements and packaging in JAR'
 
-    //TODO
-    notCompatibleWithConfigurationCache('')
+    notCompatibleWithConfigurationCache("alt doesn't support cache")
 
     def altSrcDir = file("$buildDir/alt-src")
     def altClassesDir = file("$buildDir/alt-classes")
     def replacements = [
+            //TODO
             'AuthController': 'AltAuthController',
             'JwtUtil'       : 'AltJwtUtil',
             'myVariable'    : 'altVar'
-            //TODO добавь свои замены
     ]
 
     dependsOn tasks.named('build')
 
     doLast {
-        println "===== Создание альтернативной версии ====="
+        println "===== Making alt version ====="
 
         delete altSrcDir
         copy {
@@ -324,7 +323,6 @@ tasks.register('alt') {
             into altSrcDir
         }
 
-        // Замены в .java-файлах
         fileTree(altSrcDir).matching { include '**/*.java' }.each { file ->
             def text = file.text
             replacements.each { from, to ->
@@ -386,12 +384,12 @@ tasks.register('alt') {
 // task team
 tasks.register('team') {
     group = 'Build'
-    description = 'Собирает два предыдущих коммита и архивирует их артефакты'
+    description = 'Collects the previous two commits and archives their artifacts'
 
-    notCompatibleWithConfigurationCache("Использует git и временные изменения файлов")
+    notCompatibleWithConfigurationCache("Uses git and temporary file changes")
 
     doLast {
-        println "===== Начало сборки предыдущих версий ====="
+        println "===== Start building previous versions ====="
 
         def git = ['git']
         def buildDirPath = "${project.buildDir}/team-builds"
@@ -405,7 +403,7 @@ tasks.register('team') {
             standardOutput = revisions
         }
         def commitHashes = revisions.toString().readLines()
-        println "Ревизии для сборки: $commitHashes"
+        println "Build revisions: $commitHashes"
 
         def originalBranch = new ByteArrayOutputStream()
         exec {
@@ -416,12 +414,12 @@ tasks.register('team') {
 
         def counter = 1
         commitHashes.each { commit ->
-            println "→ Чекаут коммита $commit"
+            println "→ Commit checkout $commit"
             exec {
                 commandLine 'git', 'checkout', commit
             }
 
-            println "→ Сборка коммита $commit"
+            println "→ Commit build $commit"
             exec {
                 commandLine './gradlew', 'clean', 'build'
             }
@@ -438,23 +436,23 @@ tasks.register('team') {
             counter++
         }
 
-        println "→ Возврат к исходной ветке $branchName"
+        println "→ Return to origin branch $branchName"
         exec {
             commandLine 'git', 'checkout', branchName
         }
 
-        println "→ Архивация результатов"
+        println "→ Archive results"
         ant.zip(destfile: outputZip) {
             fileset(dir: buildDirPath)
         }
 
-        println "✅ ZIP-файл создан: ${outputZip.absolutePath}"
+        println "✅ ZIP-file created: ${outputZip.absolutePath}"
     }
 }
 
 tasks.register('native2ascii') {
     group = 'I18n'
-    description = 'Преобразование файлов локализации в ASCII-формат'
+    description = 'Converting localization files to ASCII format'
 
     def resourcesDir = file('src/main/resources')
     def outputDir = file("$buildDir/native2ascii")
@@ -463,7 +461,7 @@ tasks.register('native2ascii') {
     outputs.dir(outputDir)
 
     doLast {
-        println "Начато преобразование native2ascii..."
+        println "Refactoring native2ascii..."
 
         // Создаем выходную директорию
         outputDir.mkdirs()

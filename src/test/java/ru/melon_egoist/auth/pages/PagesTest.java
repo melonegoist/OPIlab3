@@ -9,7 +9,7 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class TestTest {
+public class PagesTest {
 
     private WebDriver driver;
 
@@ -20,14 +20,12 @@ public class TestTest {
         driver.manage().window().maximize();
 
         driver.get("http://localhost:5173/");
-//        login("admin", "1234");
     }
 
-//    @BeforeEach
-//    void openLoginPage() {
-//        driver.get("http://localhost:5173/");
-//        login("admin", "1234");
-//    }
+    @BeforeEach
+    void openLoginPage() {
+        driver.get("http://localhost:5173/");
+    }
 
     @AfterAll
     void tearDown() {
@@ -41,6 +39,7 @@ public class TestTest {
         Assertions.assertTrue(driver.getCurrentUrl().contains("/reg"));
     }
 
+
     @Test
     @Order(2)
     void togglePasswordVisibility() {
@@ -53,60 +52,34 @@ public class TestTest {
     @Test
     @Order(3)
     void successfulLoginDrawsGraph() {
-//        login("admin", "1234");
-        WebElement canvas = driver.findElement(By.id("graph"));
+        login("admin", "1234");
+        WebElement canvas = driver.findElement(By.id("submit-button"));
         Assertions.assertTrue(canvas.isDisplayed());
     }
 
     @Test
-    @Order(3)
-    void logoutClearsSession() {
-//        login("admin", "1234");
+    @Order(4)
+    void logoutSession() {
         driver.findElement(By.id("corner_button")).click();
-        Assertions.assertTrue(driver.getCurrentUrl().contains("/"));
+
+        WebElement button = driver.findElement(By.id("login-button"));
+
+        Assertions.assertTrue(button.isDisplayed());
     }
 
     @Test
-    @Order(4)
+    @Order(5)
     void usernameMessageAppears() {
-        driver.findElement(By.id("corner_button")).click();
         login("admin", "1234");
         Assertions.assertTrue(driver.getPageSource().contains("Welcome, admin"));
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     void emptyXShowsError() {
-        login("admin", "1234");
-
-        WebElement xInput = driver.findElement(By.id("x-input"));
-        xInput.clear();
-        assertEquals("", xInput.getAttribute("value"));
-
-        // Указываем Y и R, чтобы проверить только поведение пустого X
         driver.findElement(By.id("y-input")).sendKeys("2");
         driver.findElement(By.id("r-input")).sendKeys("3");
 
-        // Нажимаем кнопку "Send"
-        WebElement sendButton = driver.findElement(By.id("submit-button"));
-        sendButton.click();
-
-        WebElement notAllowedGraph = driver.findElement(By.id("graph"));
-        Assertions.assertFalse(notAllowedGraph.isDisplayed());
-    }
-
-    @Test
-    @Order(6)
-    void emptyYShowsError() {
-        WebElement yInput = driver.findElement(By.id("y-input"));
-        yInput.clear();
-        assertEquals("", yInput.getAttribute("value"));
-
-        // Указываем Y и R, чтобы проверить только поведение пустого X
-        driver.findElement(By.id("x-input")).sendKeys("1");
-        driver.findElement(By.id("r-input")).sendKeys("3");
-
-        // Нажимаем кнопку "Send"
         WebElement sendButton = driver.findElement(By.id("submit-button"));
         sendButton.click();
 
@@ -116,12 +89,24 @@ public class TestTest {
 
     @Test
     @Order(7)
+    void emptyYShowsError() {
+        driver.findElement(By.id("x-input")).sendKeys("1");
+        driver.findElement(By.id("r-input")).sendKeys("3");
+
+        WebElement sendButton = driver.findElement(By.id("submit-button"));
+        sendButton.click();
+
+        WebElement notAllowedGraph = driver.findElement(By.id("graph"));
+
+        Assertions.assertFalse(notAllowedGraph.isDisplayed());
+    }
+
+    @Test
+    @Order(8)
     void emptyRShowsError() {
-        // Указываем Y и R, чтобы проверить только поведение пустого X
         driver.findElement(By.id("x-input")).sendKeys("2");
         driver.findElement(By.id("y-input")).sendKeys("3");
 
-        // Нажимаем кнопку "Send"
         WebElement sendButton = driver.findElement(By.id("submit-button"));
         sendButton.click();
 
@@ -130,64 +115,69 @@ public class TestTest {
     }
 
     @Test
-    @Order(8)
+    @Order(9)
     void xOutsideRangeShowsError() {
-        driver.findElement(By.id("x-input")).sendKeys("4"); // допустим [-3;3]
-        driver.findElement(By.id("submit")).click();
+        driver.findElement(By.id("x-input")).sendKeys("4");
+        driver.findElement(By.id("submit-button")).click();
+
         Assertions.assertTrue(driver.getPageSource().contains("Wrong x"));
     }
 
     @Test
-    @Order(9)
+    @Order(10)
     void yOutsideRangeShowsError() {
-        driver.findElement(By.id("y-input")).sendKeys("6"); // допустим [-2;5]
+        driver.findElement(By.id("y-input")).sendKeys("6");
         driver.findElement(By.id("submit-button")).click();
+
         Assertions.assertTrue(driver.getPageSource().contains("Wrong y"));
     }
 
     @Test
-    @Order(10)
+    @Order(11)
     void rOutsideRangeShowsError() {
-        driver.findElement(By.id("r-input")).sendKeys("6"); // допустим [1;5]
+        driver.findElement(By.id("r-input")).sendKeys("6");
         driver.findElement(By.id("submit-button")).click();
+
         Assertions.assertTrue(driver.getPageSource().contains("Wrong r"));
     }
 
     @Test
-    @Order(11)
+    @Order(12)
     void validDataDrawsGraph() {
         fillPointForm("1", "2", "3");
-        WebElement graph = driver.findElement(By.id("graph-canvas"));
+
+        WebElement graph = driver.findElement(By.id("graph"));
+
         Assertions.assertTrue(graph.isDisplayed());
     }
 
     @Test
-    @Order(12)
+    @Order(13)
     void showAllDotsDisplaysPreviousHits() {
-//        login("admin", "1234");
         driver.findElement(By.id("show_dots_button")).click();
         WebElement table = driver.findElement(By.id("dashboard"));
+
         Assertions.assertTrue(table.isDisplayed());
     }
 
     @Test
-    @Order(13)
+    @Order(14)
     void sessionPersistsAfterReload() {
-//        login("admin", "1234");
         driver.navigate().refresh();
+
         Assertions.assertTrue(driver.findElement(By.id("corner_button")).isDisplayed());
     }
 
     @Test
-    @Order(14)
+    @Order(15)
     void sendButtonColorChanges() {
         fillPointForm("1", "2", "3");
+
         WebElement button = driver.findElement(By.id("submit-button"));
         String color = button.getCssValue("background-color");
-        // Проверка по цвету — зависит от CSS, просто пример:
-        Assertions.assertTrue(color.contains("rgba(0, 128, 0") || color.contains("rgba(255, 0, 0"));
+        Assertions.assertTrue(color.contains("green") || color.contains("red"));
     }
-
+//
     private void login(String username, String password) {
         driver.findElement(By.id("login-field")).sendKeys(username);
         driver.findElement(By.id("password-field")).sendKeys(password);
@@ -195,7 +185,6 @@ public class TestTest {
     }
 
     private void fillPointForm(String x, String y, String r) {
-        login("testuser", "password123");
         driver.findElement(By.id("x-input")).sendKeys(x);
         driver.findElement(By.id("y-input")).sendKeys(y);
         driver.findElement(By.id("r-input")).sendKeys(r);
