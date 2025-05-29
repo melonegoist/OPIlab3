@@ -807,7 +807,28 @@ tasks.register('myTest', Test) {
     }
 }
 
-tasks.register("report") {
-    group = ''
-    description = ''
+tasks.register('report') {
+    group = 'verification'
+    description = 'Run tests, save junit report, add it to git and commit.'
+
+    dependsOn test
+
+    doLast {
+        def reportDir = file("${buildDir}/test-results/test")
+        def gitAddCmd = "git add ${reportDir.absolutePath}"
+        def gitCommitCmd = 'git commit -m "Add junit test report"'
+
+        // Добавляем отчет в git
+        exec {
+            commandLine 'git', 'add', "${reportDir.absolutePath}"
+        }
+
+        // Делаем коммит
+        exec {
+            commandLine 'git', 'commit', '-m', '"Add junit test report"'
+            // Игнорируем ошибку, если нет изменений для коммита
+            ignoreExitValue = true
+        }
+    }
 }
+
