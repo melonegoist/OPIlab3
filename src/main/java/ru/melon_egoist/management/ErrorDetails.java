@@ -13,8 +13,6 @@ public class ErrorDetails {
         this.details = details;
     }
 
-    // Геттеры и сеттеры
-
     public Date getTimestamp() {
         return timestamp;
     }

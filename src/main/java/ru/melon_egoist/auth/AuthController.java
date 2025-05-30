@@ -11,8 +11,6 @@ import org.springframework.web.bind.annotation.*;
 import ru.melon_egoist.auth.registration.ErrorResponse;
 import ru.melon_egoist.auth.registration.RegistrationRequest;
 
-// test comment
-
 @RestController
 public class AuthController {
     @Autowired
