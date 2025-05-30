@@ -114,16 +114,47 @@ tasks.register('myCompile', JavaCompile) {
 
 //TODO: cache
 
-// task music
+//✅ task music
 tasks.register('music') {
-    notCompatibleWithConfigurationCache("music task doesn't ")
+    group = 'Notification'
+    description = 'Plays a success sound after build'
+
+    notCompatibleWithConfigurationCache("Music task doesn't support cache")
+
     dependsOn myBuild
+
+    doFirst {
+        println "===== music starting ====="
+    }
+
     doLast {
-        println "music starting..."
-        exec {
-            workingDir "${projectDir}"
-            commandLine 'paplay', 'src/main/resources/success.wav'
-            ignoreExitValue true
+        def soundFile = file("src/main/resources/success.wav")
+
+        if (!soundFile.exists()) {
+            println("Sound file not found: ${soundFile}")
+
+            return
+        }
+
+        def playCommand = null
+        def osName = System.getProperty("os.name").toLowerCase()
+
+        if (osName.contains("windows")) {
+            playCommand = ['powershell', '-c', "PlaySound('${soundFile.absolutePath}', 0)"]
+        } else if (osName.contains("mac")) {
+            playCommand = ['afplay', soundFile.absolutePath]
+        } else {
+            playCommand = ['paplay', soundFile.absolutePath]
+        }
+
+        try {
+            exec {
+                commandLine playCommand
+                workingDir projectDir
+                ignoreExitValue true
+            }
+        } catch (Exception e) {
+            throw new GradleException("Can't play music: ${e.message}")
         }
     }
 }
