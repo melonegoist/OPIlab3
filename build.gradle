@@ -339,32 +339,37 @@ tasks.register('myClean') {
             }
         }
 
-        println "===== ✅Clean completed ====="
+        println "✅ Clean completed"
     }
 }
 
-// task alt
+// ✅ task alt
 tasks.register('alt') {
     group = 'Build'
     description = 'Creates an alternative version of the program with replacements and packaging in JAR'
 
-    notCompatibleWithConfigurationCache("alt doesn't support cache")
+    notCompatibleWithConfigurationCache("alt doesn't support cache configuration")
+
+    dependsOn tasks.named('myBuild')
 
     def altSrcDir = file("$buildDir/alt-src")
     def altClassesDir = file("$buildDir/alt-classes")
     def replacements = [
-            //TODO
             'AuthController': 'AltAuthController',
             'JwtUtil'       : 'AltJwtUtil',
-            'myVariable'    : 'altVar'
+            'authenticationManager'    : 'altAuthenticationManager',
+            'jwtTokenUtil': 'altJwtTokenUtil',
+            'createUser': 'altCreateUser',
+            'Backend': 'AltBackend'
     ]
 
-    dependsOn tasks.named('myBuild')
+    doFirst {
+        println "===== Making alt version ====="
+    }
 
     doLast {
-        println "===== Making alt version ====="
-
         delete altSrcDir
+
         copy {
             from 'src/main/java'
             into altSrcDir
@@ -417,7 +422,7 @@ tasks.register('alt') {
         ant.jar(destfile: jarFile) {
             fileset(dir: altClassesDir)
             manifest {
-                attributes 'Main-Class':'com.example.AltAuthController'
+                attributes 'Main-Class':'ru.melon_egoist.AltBackend'
             }
         }
 
