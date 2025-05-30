@@ -437,15 +437,18 @@ tasks.register('team') {
 
     notCompatibleWithConfigurationCache("Uses git and temporary file changes")
 
-    doLast {
-        println "===== Start building previous versions ====="
+    doFirst {
+        println('===== Start building previous versions =====')
+    }
 
+    doLast {
         def git = ['git']
         def buildDirPath = "${project.buildDir}/team-builds"
         def outputZip = file("${project.buildDir}/team-artifacts.zip")
 
         def commits = git + ['rev-list', '--max-count=2', 'HEAD']
         def revisions = new ByteArrayOutputStream()
+
         exec {
             commandLine commits
             standardOutput = revisions
@@ -860,8 +863,6 @@ tasks.register('report') {
 
     doLast {
         def reportDir = file("${buildDir}/test-results/test")
-//        def gitAddCmd = "git add ${reportDir.absolutePath}"
-//        def gitCommitCmd = 'git commit -m "Add junit test report"'
 
         exec {
             commandLine 'git', 'add', "${reportDir.absolutePath}"
