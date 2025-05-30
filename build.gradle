@@ -80,10 +80,10 @@ tasks.register('scp') {
 }
 
 
-// task compile
+// ✅ task compile
 tasks.register('myCompile', JavaCompile) {
     group = 'Build'
-    description = 'Similar to compileJava but with a different output directory'
+    description = 'Another realisation of compile'
 
     source = sourceSets.main.java
     classpath = sourceSets.main.compileClasspath
@@ -93,6 +93,23 @@ tasks.register('myCompile', JavaCompile) {
     targetCompatibility = JavaVersion.VERSION_17.toString()
 
     options.encoding = 'UTF-8'
+
+    doFirst {
+        println '===== Starting compilation ====='
+    }
+
+    doLast {
+        try {
+            def compiledFiles = fileTree(destinationDirectory).matching {
+                include '**/*.class'
+            }.files.size()
+
+            println "✅ Compilation success. Compiled files: $compiledFiles"
+
+        } catch (Exception e) {
+            throw new GradleException("Error during post-compilation step: ${e.message}")
+        }
+    }
 }
 
 //TODO: cache
