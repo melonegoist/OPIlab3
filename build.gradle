@@ -312,12 +312,16 @@ tasks.register('myBuild', Jar) {
     }
 }
 
-// task clean
+// ✅ task clean
 tasks.register('myClean') {
     group = 'Build'
     description = 'Removes all compiled classes and temporary files.'
 
-    notCompatibleWithConfigurationCache('')
+    notCompatibleWithConfigurationCache("Clean doesn't support cache configuration")
+
+    doFirst {
+        println('===== Start cleaning =====')
+    }
 
     doLast {
         def dirsToDelete = [
