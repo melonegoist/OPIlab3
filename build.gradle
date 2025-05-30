@@ -61,6 +61,7 @@ def getRequiredProperty(String name) {
 tasks.register('scp') {
     group = 'Deployment'
     description = 'Deploys JAR via SCP'
+
     dependsOn tasks.named('myBuild')
 
     doLast {
@@ -71,7 +72,7 @@ tasks.register('scp') {
 
         exec {
             commandLine 'scp', '-i', sshKey.absolutePath,
-                    layout.buildDirectory.file("libs/backend-1.0-plain.jar").get().asFile.absolutePath,
+                    layout.buildDirectory.file("libs/${project.name}-${project.version}.jar").get().asFile.absolutePath,
                     "$remoteUser@$remoteHost:~/$remoteDir/"
         }
 
@@ -241,8 +242,8 @@ tasks.named('javadoc', Javadoc) {
         addBooleanOption('html5', true)
         addStringOption('Xdoclint:none', '-quiet')
         links = [
-                'https://docs.oracle.com/en/java/javase/17/docs/api/',
-                'https://docs.spring.io/spring-framework/docs/current/javadoc-api/'
+//                'https://docs.oracle.com/en/java/javase/17/docs/api/',
+//                'https://docs.spring.io/spring-framework/docs/current/javadoc-api/'
         ]
     }
 
@@ -286,7 +287,7 @@ tasks.register('buildCustom', Jar) {
     description = 'Creating an executable JAR'
     dependsOn tasks.named('myCompile')
 
-    archiveBaseName = 'myapp-custom'
+    archiveBaseName = "${project.name}"
     archiveVersion = '1.0'
     manifest {
         attributes(
