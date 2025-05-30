@@ -281,6 +281,8 @@ tasks.register('xml') {
                 throw new GradleException("XML validation failed for ${file.name}")
             }
         }
+
+        println("Validating has been completed ✅")
     }
 }
 
