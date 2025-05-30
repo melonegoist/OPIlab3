@@ -41,10 +41,6 @@ java.sourceCompatibility = JavaVersion.VERSION_17
 
 
 
-ssh.settings {
-    knownHosts = allowAnyHosts
-}
-
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
@@ -61,17 +57,11 @@ def getRequiredProperty(String name) {
 
 
 
-//TODO: report
-
-
-
-// task scp
+// ✅ task scp
 tasks.register('scp') {
     group = 'Deployment'
     description = 'Deploys JAR via SCP'
-    dependsOn tasks.named('build')
-
-    notCompatibleWithConfigurationCache("SSH task doesn't support config cache")
+    dependsOn tasks.named('myBuild')
 
     doLast {
         def remoteHost = getRequiredProperty('host')
@@ -81,11 +71,11 @@ tasks.register('scp') {
 
         exec {
             commandLine 'scp', '-i', sshKey.absolutePath,
-                    layout.buildDirectory.file("libs/backend-1.0.jar").get().asFile.absolutePath,
+                    layout.buildDirectory.file("libs/backend-1.0-plain.jar").get().asFile.absolutePath,
                     "$remoteUser@$remoteHost:~/$remoteDir/"
         }
 
-        println("✅Deploy via scp was done successfully!")
+        println("✅ Deploy via scp was done successfully!")
     }
 }
 
