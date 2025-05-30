@@ -2,6 +2,8 @@ import org.xml.sax.helpers.DefaultHandler
 import javax.tools.ToolProvider
 import javax.xml.parsers.SAXParserFactory
 import java.security.MessageDigest
+import groovy.xml.XmlSlurper
+
 
 
 plugins {
@@ -22,7 +24,7 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
     implementation 'io.jsonwebtoken:jjwt-impl:0.12.3'
     implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
-    runtimeOnly 'org.postgresql:postgresql:42.6.0'
+    runtimeOnly 'org.postgresql:postgresql:42.7.2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
@@ -32,9 +34,9 @@ dependencies {
 
 
 
-group = 'org.example'
+group = 'ru.melon_egoist'
 version = '1.0'
-description = 'backend'
+
 java.sourceCompatibility = JavaVersion.VERSION_17
 
 
@@ -79,18 +81,14 @@ tasks.register('scp') {
 
         exec {
             commandLine 'scp', '-i', sshKey.absolutePath,
-                    layout.buildDirectory.file("libs/backend-1.0-plain.jar").get().asFile.absolutePath,
+                    layout.buildDirectory.file("libs/backend-1.0.jar").get().asFile.absolutePath,
                     "$remoteUser@$remoteHost:~/$remoteDir/"
         }
+
+        println("✅Deploy via scp was done successfully!")
     }
 }
 
-// test
-tasks.register('testTask') {
-    doLast {
-        println 'test done completely!'
-    }
-}
 
 // task compile
 tasks.register('myCompile', JavaCompile) {
@@ -107,12 +105,14 @@ tasks.register('myCompile', JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+//TODO: cache
+
 // task music
 tasks.register('music') {
-    notCompatibleWithConfigurationCache("")
+    notCompatibleWithConfigurationCache("music task doesn't ")
     dependsOn myBuild
     doLast {
-        println "music started"
+        println "music starting..."
         exec {
             workingDir "${projectDir}"
             commandLine 'paplay', 'src/main/resources/success.wav'
@@ -145,7 +145,7 @@ tasks.register('generateChecksums') {
 tasks.register('updateManifest', Jar) {
     notCompatibleWithConfigurationCache("Использует внешние команды")
     group = 'Documentation'
-    description = 'Обновление MANIFEST.MF с хешами'
+    description = 'Update MANIFEST.MF with hash sums'
     dependsOn tasks.named('jar'), tasks.named('generateChecksums')
     archiveClassifier = 'updated'
 
@@ -190,7 +190,7 @@ tasks.register('doc') {
 
     doLast {
         logger.lifecycle("""
-        ===== Documentation successfully generated! =====
+        ===== ✅Documentation successfully generated! =====
         Main JAR: ${tasks.named('updateManifest').get().archiveFile.get()}
         Documentation: ${tasks.named('packageJavadoc').get().archiveFile.get()}
         """)
@@ -241,7 +241,8 @@ tasks.register('xml') {
     }
 }
 
-// task build
+//TODO refactor build
+
 tasks.register('buildCustom', Jar) {
     group = 'Build'
     description = 'Creating an executable JAR'
@@ -265,6 +266,7 @@ tasks.register('buildCustom', Jar) {
     }
 }
 
+// task build
 tasks.register('myBuild') {
     dependsOn tasks.named('buildCustom')
 }
@@ -292,7 +294,7 @@ tasks.register('myClean') {
             }
         }
 
-        println "===== Clean completed ====="
+        println "===== ✅Clean completed ====="
     }
 }
 
@@ -312,7 +314,7 @@ tasks.register('alt') {
             'myVariable'    : 'altVar'
     ]
 
-    dependsOn tasks.named('build')
+    dependsOn tasks.named('myBuild')
 
     doLast {
         println "===== Making alt version ====="
@@ -331,7 +333,6 @@ tasks.register('alt') {
             file.text = text
         }
 
-        // Переименование файлов по имени public класса
         fileTree(altSrcDir).matching { include '**/*.java' }.each { file ->
             def text = file.text
             def matcher = text =~ /\bpublic\s+(class|interface|enum)\s+(\w+)/
@@ -345,7 +346,6 @@ tasks.register('alt') {
             }
         }
 
-        // Компиляция
         delete altClassesDir
         altClassesDir.mkdirs()
 
@@ -353,7 +353,7 @@ tasks.register('alt') {
         def classpathStr = sourceSets.main.compileClasspath.asPath
 
         def compiler = ToolProvider.getSystemJavaCompiler()
-        if (!compiler) throw new GradleException("Java Compiler не найден! Убедитесь, что используется JDK")
+        if (!compiler) throw new GradleException("Java Compiler not found!")
 
         def result = compiler.run(
                 null, null, null,
@@ -365,19 +365,18 @@ tasks.register('alt') {
                 *srcFiles
         )
         if (result != 0) {
-            throw new GradleException("Альтернативная компиляция завершилась с ошибкой")
+            throw new GradleException("Error occurred during alt task!")
         }
 
-        // Создание JAR-файла
         def jarFile = file("$buildDir/libs/${project.name}-${project.version}-alt.jar")
         ant.jar(destfile: jarFile) {
             fileset(dir: altClassesDir)
             manifest {
-                attributes 'Main-Class':'com.example.AltAuthController' // поменяй на свой alt-main
+                attributes 'Main-Class':'com.example.AltAuthController'
             }
         }
 
-        println "✅ Альтернативный JAR создан: ${jarFile.absolutePath}"
+        println "✅ Alt Jar built: ${jarFile.absolutePath}"
     }
 }
 
@@ -395,7 +394,6 @@ tasks.register('team') {
         def buildDirPath = "${project.buildDir}/team-builds"
         def outputZip = file("${project.buildDir}/team-artifacts.zip")
 
-        // Получаем два предыдущих коммита
         def commits = git + ['rev-list', '--max-count=2', 'HEAD']
         def revisions = new ByteArrayOutputStream()
         exec {
@@ -414,14 +412,14 @@ tasks.register('team') {
 
         def counter = 1
         commitHashes.each { commit ->
-            println "→ Commit checkout $commit"
+            println "Commit checkout $commit"
             exec {
                 commandLine 'git', 'checkout', commit
             }
 
-            println "→ Commit build $commit"
+            println "Commit build $commit"
             exec {
-                commandLine './gradlew', 'clean', 'build'
+                commandLine './gradlew', 'myClean', 'myBuild'
             }
 
             def jarFile = file("${project.buildDir}/libs/${project.name}-${project.version}.jar")
@@ -436,12 +434,12 @@ tasks.register('team') {
             counter++
         }
 
-        println "→ Return to origin branch $branchName"
+        println "Return to origin branch $branchName"
         exec {
             commandLine 'git', 'checkout', branchName
         }
 
-        println "→ Archive results"
+        println "Archive results"
         ant.zip(destfile: outputZip) {
             fileset(dir: buildDirPath)
         }
@@ -450,6 +448,7 @@ tasks.register('team') {
     }
 }
 
+// task native2ascii
 tasks.register('native2ascii') {
     group = 'I18n'
     description = 'Converting localization files to ASCII format'
@@ -463,25 +462,19 @@ tasks.register('native2ascii') {
     doLast {
         println "Refactoring native2ascii..."
 
-        // Создаем выходную директорию
         outputDir.mkdirs()
 
-        // Обрабатываем все .properties файлы
         fileTree(resourcesDir).matching {
             include '**/*.properties'
         }.each { sourceFile ->
             try {
-                // Получаем относительный путь
                 def relativePath = resourcesDir.toURI().relativize(sourceFile.toURI()).getPath()
                 def targetFile = new File(outputDir, relativePath)
 
-                // Создаем целевую директорию
                 targetFile.parentFile.mkdirs()
 
-                // Читаем файл с правильной кодировкой
                 String content = sourceFile.getText('UTF-8')
 
-                // Преобразуем содержимое
                 StringBuilder convertedContent = new StringBuilder()
                 for (int i = 0; i < content.length(); i++) {
                     char c = content.charAt(i)
@@ -492,19 +485,19 @@ tasks.register('native2ascii') {
                     }
                 }
 
-                // Записываем результат в ISO-8859-1
                 targetFile.setText(convertedContent.toString(), 'UTF-8')
 
-                println "Обработан: ${relativePath}"
+                println "Text has been refactored: ${relativePath}"
             } catch (Exception e) {
-                throw new GradleException("Ошибка обработки файла ${sourceFile.name}", e)
+                throw new GradleException("Error with refactoring file ${sourceFile.name}", e)
             }
         }
 
-        println "Преобразование завершено. Результат в ${outputDir}"
+        println "✅Native2Ascii refactor has been done successfully! Result in ${outputDir}"
     }
 }
 
+// task history
 tasks.register('history') {
     group = 'Version Control'
     description = 'Find last working version in git history'
@@ -623,7 +616,6 @@ def getCurrentGitBranch() {
 }
 
 def cloneCommitToTempDir(String commit, File tempDir) {
-    // Очищаем временную директорию
     deleteTempDir(tempDir)
     tempDir.mkdirs()
 
@@ -655,6 +647,7 @@ def getGitDiff(String commit1, String commit2) {
     return output.toString()
 }
 
+// task diff
 tasks.register('diff') {
     group = 'Version Control'
     description = 'Auto commit for protected changes'
@@ -698,7 +691,7 @@ tasks.register('diff') {
 
 def createDefaultConfig(File configFile) {
     configFile.parentFile.mkdirs()
-    configFile.text = """
+    configFile.text = """// Clearing current dir...
     protected.paths=src/main/java/ru/melon_egoist/auth/,src/main/java/ru/melon_egoist/graph
     ignore.tests=true
     """.stripIndent().trim()
@@ -752,8 +745,8 @@ def commitChanges(File messageFile) {
     println "Commit done: ${message}"
 }
 
-import groovy.xml.XmlSlurper
 
+// task myTest
 tasks.register('myTest', Test) {
     group = 'Verification'
     description = 'Alt variation of default test task'
@@ -802,31 +795,30 @@ tasks.register('myTest', Test) {
         if (failed > 0) {
             println "Build has some failures!"
         } else {
-            println "All tests were done successfully!"
+            println "✅All tests were done successfully!"
         }
     }
 }
 
+
+// task report
 tasks.register('report') {
     group = 'verification'
     description = 'Run tests, save junit report, add it to git and commit.'
 
-    dependsOn test
+    dependsOn myTest
 
     doLast {
         def reportDir = file("${buildDir}/test-results/test")
-        def gitAddCmd = "git add ${reportDir.absolutePath}"
-        def gitCommitCmd = 'git commit -m "Add junit test report"'
+//        def gitAddCmd = "git add ${reportDir.absolutePath}"
+//        def gitCommitCmd = 'git commit -m "Add junit test report"'
 
-        // Добавляем отчет в git
         exec {
             commandLine 'git', 'add', "${reportDir.absolutePath}"
         }
 
-        // Делаем коммит
         exec {
             commandLine 'git', 'commit', '-m', '"Add junit test report"'
-            // Игнорируем ошибку, если нет изменений для коммита
             ignoreExitValue = true
         }
     }
